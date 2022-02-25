@@ -8,6 +8,7 @@
 #include <fstream>
 #include <regex>
 #include <QFileInfo>
+#include <QHostAddress>
 
 //////
 /// 测试版本号 Qt Version 6.x.x
@@ -35,7 +36,7 @@ public slots:
         mSocketCommand = new QTcpSocket(this);
         connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_download_command_result);
-        mSocketCommand->connectToHost("192.168.1.103", 21);
+        mSocketCommand->connectToHost(QHostAddress(mFtpHost), 21);
     }
 
     void slot_start_file_upload()
@@ -43,7 +44,7 @@ public slots:
         mSocketCommand = new QTcpSocket(this);
         connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_upload_command_result);
-        mSocketCommand->connectToHost("192.168.1.103", 21);
+        mSocketCommand->connectToHost(QHostAddress(mFtpHost), 21);
     }
 
 private slots:
@@ -88,7 +89,7 @@ private slots:
                 uint32_t p1 = list.at(4).toUInt() * 256;
                 uint32_t p2 = QString(list.at(5)).remove(".").remove(")").toUInt();
                 mSocketData = new QTcpSocket;
-                mSocketData->connectToHost("192.168.1.103", p1 + p2);
+                mSocketData->connectToHost(QHostAddress(mFtpHost), p1 + p2);
                 connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_file_data_recv);
 
                 mLoginStep++;
@@ -157,7 +158,7 @@ private slots:
                 uint32_t p1 = list.at(4).toUInt() * 256;
                 uint32_t p2 = QString(list.at(5)).remove(".").remove(")").toUInt();
                 mSocketData = new QTcpSocket;
-                mSocketData->connectToHost("192.168.1.103", p1 + p2);
+                mSocketData->connectToHost(QHostAddress(mFtpHost), p1 + p2);
                 connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_file_data_recv);
 
                 mLoginStep++;
