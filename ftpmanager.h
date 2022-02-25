@@ -50,6 +50,9 @@ private slots:
     void slot_socket_error_occurred(QAbstractSocket::SocketError)
     {
         // 服务连接失败
+        mResultMessage = "服务器连接异常";
+        mTaskStatus = false;
+        clear();
     }
 
     void slot_recv_download_command_result()
