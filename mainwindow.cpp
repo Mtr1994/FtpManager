@@ -41,12 +41,12 @@ void MainWindow::init()
     connect(ui->btnUpload, &QPushButton::clicked, this, &MainWindow::slot_upload_file);
 
     mFtpManager = new FtpManager;
-    mFtpManager->setFtpHost("192.168.1.111");
-    mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop");
+    mFtpManager->setFtpHost("124.221.148.133");
+    mFtpManager->setDownloadPath("C:\\Users\\87482\\Desktop\\Dot");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
     connect(mFtpManager, &FtpManager::sgl_file_task_finish, this, &MainWindow::slot_file_task_finish);
 
-    ui->tbDownload->setText("高清云台_1.mp4");
+    ui->tbDownload->setText("readme.txt");
 }
 
 void MainWindow::slot_download_file()

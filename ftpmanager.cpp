@@ -1,4 +1,4 @@
-#include "ftpmanager.h"
+﻿#include "ftpmanager.h"
 
 #include <QFile>
 

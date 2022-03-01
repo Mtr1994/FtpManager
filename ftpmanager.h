@@ -1,4 +1,4 @@
-#ifndef FTPMANAGER_H
+﻿#ifndef FTPMANAGER_H
 #define FTPMANAGER_H
 
 #include <QObject>
@@ -9,6 +9,7 @@
 #include <regex>
 #include <QFileInfo>
 #include <QHostAddress>
+#include <QTextCodec>
 
 //////
 /// 测试版本号 Qt Version 6.x.x
@@ -33,6 +34,7 @@ signals:
 public slots:
     void slot_start_file_download()
     {
+        mTextCodec = QTextCodec::codecForName("UTF-8");
         mSocketCommand = new QTcpSocket(this);
         connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_download_command_result);
@@ -62,6 +64,7 @@ private slots:
         {
             QByteArray datagram = mSocketCommand->readAll();
             QString str = QString::fromLocal8Bit(datagram);
+            qDebug() << str << " " << mLoginStep;
             // 记录消息结果
             mResultMessage = str;
             if (mLoginStep == 0)
@@ -80,9 +83,16 @@ private slots:
             {
                 if (!str.contains("230"))  return clear();
                 mLoginStep++;
-                sentCmdPasv();
+                sentCmdType();
             }
             else if (mLoginStep == 3)
+            {
+                if (!str.contains("200")) return clear();
+
+                mLoginStep++;
+                sentCmdPasv();
+            }
+            else if (mLoginStep == 4)
             {
                 if (!str.contains("227")) return clear();
                 QStringList list = str.split(',');
@@ -97,15 +107,16 @@ private slots:
             }
             else if (str.contains("150"))
             {
-                std::string pattern("(.*)?\\((.*) bytes\\)(.*)?");
-                std::regex reg(pattern);
-                smatch result;
-                std::string msg = str.toStdString();
-                bool flag = regex_search(msg, result, reg);
-                if (!flag || (result.size() != 4)) return clear();
-                mTotalFileSize =  QString(result.str(2).data()).toULong();
+//                std::string pattern("(.*)?\\((.*) bytes\\)(.*)?");
+//                std::regex reg(pattern);
+//                smatch result;
+//                std::string msg = str.toStdString();
+//                bool flag = regex_search(msg, result, reg);
+//                if (!flag || (result.size() != 4)) return clear();
+//                mTotalFileSize =  QString(result.str(2).data()).toULong();
 
                 mFileStream.open(QString("%1/%2").arg(mDownloadPath, mFileName).toLocal8Bit().toStdString(), ios::binary | ios::out);
+                qDebug() << "file " << QString("%1/%2").arg(mDownloadPath, mFileName).toLocal8Bit().toStdString().data();
                 if (!mFileStream.is_open())
                 {
                     mResultMessage = "无法创建本地文件";
@@ -238,6 +249,7 @@ private:
         {
             disconnect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_download_command_result);
             disconnect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_upload_command_result);
+            sentCmdQuit();
             mSocketCommand->close();
             mSocketCommand->deleteLater();
         }
@@ -249,46 +261,50 @@ private:
 
     void sentCmdUser()
     {
-        QByteArray command = QString("USER anonymous").toLatin1();
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("USER mtr\r\n"));
         mSocketCommand->write(command);
     }
 
     void sentCmdPass()
     {
-        QByteArray command =QString("PASS").toLatin1();
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("PASS Since1994\r\n"));
         mSocketCommand->write(command);
     }
 
     void sentCmdPasv()
     {
-        QByteArray command =QString("PASV").toLatin1();
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("PASV\r\n"));
+        mSocketCommand->write(command);
+    }
+
+    void sentCmdType()
+    {
+        QByteArray command = mTextCodec->fromUnicode(QString("TYPE I\r\n"));
         mSocketCommand->write(command);
     }
 
     void sentCmdCwd(const string &path)
     {
-        QByteArray command =QString("CWD %1").arg(path.data()).toLatin1();
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("CWD %1\r\n").arg(path.data()));
         mSocketCommand->write(command);
     }
 
     void sentCmdRetr()
     {
-        QString fileName = QString("RETR %1").arg(mFileName);
-        QByteArray command = QByteArray(fileName.toUtf8());
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("RETR %1\r\n").arg(mFileName));
         mSocketCommand->write(command);
     }
 
     void sentCmdStor()
     {
         // 如果文件已存在，返回 553 错误
-        QString fileName = QString("STOR %1").arg(mFileName);
-        QByteArray command = QByteArray(fileName.toUtf8());
-        command += '\n';
+        QByteArray command = mTextCodec->fromUnicode(QString("STOR %1\r\n").arg(mFileName));
+        mSocketCommand->write(command);
+    }
+
+    void sentCmdQuit()
+    {
+        QByteArray command = mTextCodec->fromUnicode(QString("QUIT\r\n"));
         mSocketCommand->write(command);
     }
 
@@ -306,6 +322,8 @@ private:
     QString mResultMessage;
     bool mTaskStatus = false;
     QString mDownloadPath;
+
+    QTextCodec *mTextCodec = nullptr;
 };
 
 class FtpManager : public QObject
