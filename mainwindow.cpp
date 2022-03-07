@@ -41,8 +41,9 @@ void MainWindow::init()
     connect(ui->btnUpload, &QPushButton::clicked, this, &MainWindow::slot_upload_file);
 
     mFtpManager = new FtpManager;
-    mFtpManager->setFtpHost("124.221.148.133");
-    mFtpManager->setDownloadPath("C:\\Users\\87482\\Desktop\\Dot");
+    mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
+    //mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
+    mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop\\Dot");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
     connect(mFtpManager, &FtpManager::sgl_file_task_finish, this, &MainWindow::slot_file_task_finish);
 
