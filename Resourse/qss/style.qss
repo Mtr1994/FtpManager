@@ -12,9 +12,10 @@ QWidget[Background="true"]
 /* QPushButton */
 QPushButton[Ok="true"]
 {
-    min-height: 1.5em;
-    border: 1px solid #b3d8ff;
-    border-radius: 2px;
+    min-height: 2.0em;
+    min-width: 4.0em;
+    border: 0px solid #309eff;
+    border-radius: 0.24em;
     padding-left: 1em;
     padding-right: 1em;
     color: #fefefe;
@@ -93,6 +94,7 @@ QPushButton[Danger="true"]:!enabled
 QLineEdit
 {
     border: 1px solid #e0e0e0;
+    min-height: 2.0em;
     padding-left: 0.2em;
     border-radius: 0.16em;
     color: #666666;

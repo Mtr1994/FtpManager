@@ -40,6 +40,9 @@ void MainWindow::init()
     connect(ui->btnDownload, &QPushButton::clicked, this, &MainWindow::slot_download_file);
     connect(ui->btnUpload, &QPushButton::clicked, this, &MainWindow::slot_upload_file);
 
+    ui->widgetProgress->setProgressType(WidgetProgress::P_Cicle);
+    ui->widgetProgress->setCicleWidth(10);
+
     mFtpManager = new FtpManager;
     mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
     //mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
