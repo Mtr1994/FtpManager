@@ -45,9 +45,11 @@ void MainWindow::init()
     //mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
     mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop\\Dot");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
+    connect(mFtpManager, &FtpManager::sgl_file_upload_process, this, &MainWindow::slot_file_upload_percent);
     connect(mFtpManager, &FtpManager::sgl_file_task_finish, this, &MainWindow::slot_file_task_finish);
 
-    ui->tbDownload->setText("readme.txt");
+    ui->tbDownload->setText("demo3.mp4");
+    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\demo2.mp4");
 }
 
 void MainWindow::slot_download_file()
@@ -65,6 +67,14 @@ void MainWindow::slot_upload_file()
 void MainWindow::slot_file_download_percent(const QString &file, float percent)
 {
     if (file == ui->tbDownload->text())
+    {
+        ui->widgetProgress->setValue(percent);
+    }
+}
+
+void MainWindow::slot_file_upload_percent(const QString &file, float percent)
+{
+    if (file == ui->tbUpload->text())
     {
         ui->widgetProgress->setValue(percent);
     }

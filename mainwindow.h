@@ -24,6 +24,7 @@ private slots:
     void slot_upload_file();
 
     void slot_file_download_percent(const QString &file, float percent);
+    void slot_file_upload_percent(const QString &file, float percent);
     void slot_file_task_finish(const QString &file, bool status, const QString &msg);
 
 private:
