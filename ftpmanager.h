@@ -19,6 +19,7 @@
 /// 命令解析说明：https://www.cnblogs.com/hongyuyingxiao/p/10486036.html
 /// 默认采用 UTF-8 编码格式，请确认文件服务器系统编码格式为 UTF-8 编码格式，或者两者都采用其他一致的格式
 /// 保证不会因为编码格式产生找不到文件或路径的问题
+/// 修改 Windows 默认编码（GBK）为 UTF-8 ： https://blog.csdn.net/lee_ham/article/details/82634411
 
 using namespace std;
 
@@ -270,6 +271,20 @@ private slots:
                 emit sgl_file_upload_process(mFileName, 100);
                 mTaskStatus = true;
                 return clear();
+            }
+
+            // 检查网络状态
+            int tryCount = 0;
+            while (mSocketData->state() != QTcpSocket::ConnectedState)
+            {
+                tryCount++;
+                if(tryCount > 5 * 15)
+                {
+                    mResultMessage = "无法连接到服务器";
+                    mTaskStatus = false;
+                    return clear();
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
             }
 
             // 定位本地文件读取位置
