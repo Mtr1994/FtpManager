@@ -17,6 +17,8 @@
 /// FTP 属于应用层协议，通过向安装了 FTP 服务（vsftp）的服务器的指定端口发送命令
 /// 断点续传功能：https://www.cnblogs.com/duanxz/p/5127105.html
 /// 命令解析说明：https://www.cnblogs.com/hongyuyingxiao/p/10486036.html
+/// 默认采用 UTF-8 编码格式，请确认文件服务器系统编码格式为 UTF-8 编码格式，或者两者都采用其他一致的格式
+/// 保证不会因为编码格式产生找不到文件或路径的问题
 
 using namespace std;
 
@@ -129,11 +131,11 @@ private slots:
             {
                 mListCommand.remove(0, 1);
                 // 准备登录
-                mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toLatin1());
-                mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toLatin1());
-                mListCommand.append(QString("PASV\r\n").toLatin1());
-                mListCommand.append(QString("TYPE A\r\n").toLatin1());
-                mListCommand.append(QString("NLST\r\n").toLatin1());
+                mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toUtf8());
+                mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
+                mListCommand.append(QString("PASV\r\n").toUtf8());
+                mListCommand.append(QString("TYPE A\r\n").toUtf8());
+                mListCommand.append(QString("NLST\r\n").toUtf8());
             }
         }
         else if (cmd == "PASV")
@@ -210,12 +212,12 @@ private slots:
         {
             mListCommand.remove(0, 1);
             // 准备登录
-            mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toLatin1());
-            mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toLatin1());
-            mListCommand.append(QString("PASV\r\n").toLatin1());
-            mListCommand.append(QString("TYPE A\r\n").toLatin1());
-            mListCommand.append(QString("CWD upload\r\n").toLatin1());
-            mListCommand.append(QString("NLST\r\n").toLatin1());
+            mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toUtf8());
+            mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE A\r\n").toUtf8());
+            mListCommand.append(QString("CWD upload\r\n").toUtf8());
+            mListCommand.append(QString("NLST\r\n").toUtf8());
         }
         else if (cmd == "PASV")
         {
@@ -282,6 +284,7 @@ private slots:
 
                 array.resize(subSize);
                 mFileStream.read(array.data(), subSize);
+                // 有可能还没有成功连接
                 mSocketData->write(array.data(), subSize);
                 mSocketData->flush();
                 mSocketData->waitForBytesWritten(-1);
@@ -295,7 +298,7 @@ private slots:
             mTaskStatus = true;
 
             // 退出登录
-            mListCommand.append(QString("QUIT\r\n").toLatin1());
+            mListCommand.append(QString("QUIT\r\n").toUtf8());
             sentCommand();
             return clear();
         }
@@ -367,26 +370,27 @@ private slots:
     // 解析下载 NLST 回复数据
     void parse_cmd_download_nlst_data()
     {
-        qDebug() << "parse nlst";
+        qDebug() << "parse nlst " << mServerDirInfo << " " << mFileName;
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
         mListCommand.remove(0, 1);
         auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
+
         if (!list.contains(mFileName))
         {
             mResultMessage = "文件不存在";
             mTaskStatus = false;
 
             // 退出登录
-            mListCommand.append(QString("QUIT\r\n").toLatin1());
+            mListCommand.append(QString("QUIT\r\n").toUtf8());
             sentCommand();
             return clear();
         }
         else
         {
-            mListCommand.append(QString("PASV\r\n").toLatin1());
-            mListCommand.append(QString("TYPE A\r\n").toLatin1());
-            mListCommand.append(QString("LIST %1\r\n").arg(mFileName).toLatin1());
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE A\r\n").toUtf8());
+            mListCommand.append(QString("LIST %1\r\n").arg(mFileName.toUtf8()));
 
             sentCommand();
         }
@@ -407,9 +411,9 @@ private slots:
         }
         else
         {
-            mListCommand.append(QString("PASV\r\n").toLatin1());
-            mListCommand.append(QString("TYPE A\r\n").toLatin1());
-            mListCommand.append(QString("LIST %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE A\r\n").toUtf8());
+            mListCommand.append(QString("LIST %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
             sentCommand();
         }
     }
@@ -421,6 +425,7 @@ private slots:
         mDataRecvFlag = false;
         mListCommand.remove(0, 1);
         mTotalFileSize = parseFileSize();
+        if (mTotalFileSize < 0) return;
         downloadFile();
     }
 
@@ -431,6 +436,7 @@ private slots:
         mDataRecvFlag = false;
         mListCommand.remove(0, 1);
         mTotalUploadLength = parseFileSize();
+        if (mTotalUploadLength < 0) return;
         uploadFile();
     }
 
@@ -454,7 +460,7 @@ private slots:
         mTaskStatus = true;
 
         // 退出登录
-        mListCommand.append(QString("QUIT\r\n").toLatin1());
+        mListCommand.append(QString("QUIT\r\n").toUtf8());
         sentCommand();
         return clear();
     }
@@ -504,9 +510,10 @@ private:
         }
     }
 
-    uint64_t parseFileSize()
+    int64_t parseFileSize()
     {
         auto list =  mServerFileInfo.split(' ', Qt::SkipEmptyParts);
+        qDebug() << "mServerFileInfo " << mServerFileInfo;
         if (mServerFileInfo.startsWith('-')) // linux 下的文件标志
         {
             if (list.size() != 9)
@@ -514,7 +521,7 @@ private:
                 mResultMessage = "Linux 系统文件大小解析失败";
                 mTaskStatus = false;
                 clear();
-                return 0;
+                return -1;
             }
             else
             {
@@ -528,7 +535,7 @@ private:
                 mResultMessage = "Windows 系统文件大小解析失败";
                 mTaskStatus = false;
                 clear();
-                return 0 ;
+                return -1 ;
             }
             else
             {
@@ -551,15 +558,15 @@ private:
             return clear();
         }
 
-        mListCommand.append(QString("PASV\r\n").toLatin1());
-        mListCommand.append(QString("TYPE I\r\n").toLatin1());
+        mListCommand.append(QString("PASV\r\n").toUtf8());
+        mListCommand.append(QString("TYPE I\r\n").toUtf8());
 
         if (length > 0)
         {
-            mListCommand.append(QString("REST %1\r\n").arg(QString::number(length)).toLatin1());
+            mListCommand.append(QString("REST %1\r\n").arg(QString::number(length)).toUtf8());
         }
 
-        mListCommand.append(QString("RETR %1\r\n").arg(mFileName).toLatin1());
+        mListCommand.append(QString("RETR %1\r\n").arg(mFileName).toUtf8());
         sentCommand();
     }
 
@@ -567,15 +574,15 @@ private:
     {
         if (mTotalUploadLength > 0)
         {
-            mListCommand.append(QString("PASV\r\n").toLatin1());
-            mListCommand.append(QString("TYPE I\r\n").toLatin1());
-            mListCommand.append(QString("APPE %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE I\r\n").toUtf8());
+            mListCommand.append(QString("APPE %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
         }
         else
         {
-            mListCommand.append(QString("PASV\r\n").toLatin1());
-            mListCommand.append(QString("TYPE I\r\n").toLatin1());
-            mListCommand.append(QString("STOR %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE I\r\n").toUtf8());
+            mListCommand.append(QString("STOR %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
         }
 
         sentCommand();
@@ -605,11 +612,11 @@ private:
     // 服务器文件描述
     QString mServerFileInfo;
     // 文件总大小
-    uint64_t mTotalFileSize = 0;
+    int64_t mTotalFileSize = 0;
     // 文件已下载大小
-    uint64_t mTotalDownloadLength = 0;
+    int64_t mTotalDownloadLength = 0;
     // 文件已上传大小
-    uint64_t mTotalUploadLength = 0;
+    int64_t mTotalUploadLength = 0;
     // 结果消息
     QString mResultMessage;
     // 任务状态
