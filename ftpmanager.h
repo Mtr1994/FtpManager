@@ -10,7 +10,6 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTimer>
 
 //////
 /// 测试版本号 Qt Version 6.x.x
@@ -25,7 +24,7 @@ class FtpProtocol : public QObject
 {
     Q_OBJECT
 public:
-    FtpProtocol(const QString &host, const QString &file, const QString &downloadpath) : mFtpHost(host), mFileName(file), mDownloadPath(downloadpath)
+    FtpProtocol(const QString &host, const QString &user, const QString &pass, const QString &file, const QString &downloadpath) : mFtpHost(host), mFtpUserName(user), mFtpUserPass(pass), mFileName(file), mDownloadPath(downloadpath)
     {
         // 填充状态码
         mStatusObject = QJsonDocument::fromJson("{"
@@ -75,6 +74,8 @@ signals:
 public slots:
     void slot_start_file_download()
     {
+        mDownloadFileFlag = true;
+        mLocalFileInfo = QFileInfo(QString("%1/%2").arg(mDownloadPath, mFileName));
         mSocketCommand = new QTcpSocket(this);
         connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_download_command_result);
@@ -83,6 +84,8 @@ public slots:
 
     void slot_start_file_upload()
     {
+        mUploadFileFlag = true;
+        mLocalFileInfo = QFileInfo(mFileName);
         mSocketCommand = new QTcpSocket(this);
         connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_upload_command_result);
@@ -110,12 +113,13 @@ private slots:
         QString cmd = mListCommand.first().left(4).trimmed();
         QString status = mStatusObject.value(cmd).toObject().value(str.at(0)).toString();
 
+        qDebug() << "mResultMessage " << str << " " << status << " " << mListCommand;
+
         // 如果命令失败，立即返回
         if ((status == "E") || ((status == "F")))
         {
-            clear();
             mTaskStatus = false;
-            return;
+            return clear();
         }
 
         // 部分命令需要处理
@@ -129,7 +133,7 @@ private slots:
                 mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toLatin1());
                 mListCommand.append(QString("PASV\r\n").toLatin1());
                 mListCommand.append(QString("TYPE A\r\n").toLatin1());
-                mListCommand.append(QString("LIST %1\r\n").arg(mFileName).toLatin1());
+                mListCommand.append(QString("NLST\r\n").toLatin1());
             }
         }
         else if (cmd == "PASV")
@@ -138,55 +142,32 @@ private slots:
             QStringList list = str.split(',');
             uint32_t p1 = list.at(4).toUInt() * 256;
             uint32_t p2 = QString(list.at(5)).remove(".").remove(")").toUInt();
-            mSocketData = new QTcpSocket;
+            if (nullptr == mSocketData)
+            {
+                mSocketData = new QTcpSocket;
+                connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_data_socket_recv_data);
+                connect(mSocketData, &QTcpSocket::disconnected, this, &FtpProtocol::slot_data_socket_closed);
+            }
+            mSocketData->close();
             mSocketData->connectToHost(QHostAddress(mFtpHost), p1 + p2);
-            connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_file_data_recv);
         }
-        else if (cmd == "LIST" && (status == "S"))
+        else if ((cmd == "NLST") && (status == "S"))
         {
-            // 由于是在单个线程中存在两个网络套接字，传输的最后一帧和传输完毕的结果相隔很近
-            // 命令触发的情况下，数据通道不一定被触发了，等待一段时间
-            uint16_t delay = (mServerFileInfo.length() == 0) ? 500 : 0;
-            QTimer::singleShot(delay, this, [this]
-            {
-                if (mServerFileInfo.size() == 0)
-                {
-                    mResultMessage = "文件不存在或无法获取其大小";
-                    mTaskStatus = false;
-                    return clear();
-                }
-
-                mListCommand.remove(0, 1);
-                mTotalFileSize = parseFileSize();
-                downloadFile();;
-            });
-            return;
+            mCommandRecvFlag = true;
+            if (!mDataRecvFlag) return;
+            return parse_cmd_download_nlst_data();
         }
-        else if (cmd == "RETR" && (status == "S"))
+        else if ((cmd == "LIST") && (status == "S"))
         {
-            uint16_t delay = (mTotalDownloadLength != mTotalFileSize) ? 500 : 0;
-            QTimer::singleShot(delay, this, [this]
-            {
-                mFileStream.close();
-                if (mTotalDownloadLength != mTotalFileSize)
-                {
-                    mResultMessage = "文件大小异常";
-                    mTaskStatus = false;
-                    return clear();
-                }
-
-                emit sgl_file_download_process(mFileName, 100.00);
-
-                mListCommand.remove(0, 1);
-                mResultMessage = "文件下载完成";
-                mTaskStatus = true;
-
-                // 退出登录
-                mListCommand.append(QString("QUIT\r\n").toLatin1());
-                sentCommand();
-                return clear();
-            });
-            return;
+            mCommandRecvFlag = true;
+            if (!mDataRecvFlag) return;
+            return parse_cmd_download_list_data();
+        }
+        else if ((cmd == "RETR") && (status == "S"))
+        {
+            mCommandRecvFlag = true;
+            if (!mDataRecvFlag) return;
+            return parse_cmd_retr();
         }
         else
         {
@@ -215,12 +196,13 @@ private slots:
         QString cmd = mListCommand.first().left(4).trimmed();
         QString status = mStatusObject.value(cmd).toObject().value(str.at(0)).toString();
 
+        qDebug() << "mResultMessage " << str << " " << status << " " << mListCommand;
+
         // 如果命令失败，立即返回
         if ((status == "E") || ((status == "F")))
         {
-            clear();
             mTaskStatus = false;
-            return;
+            return clear();
         }
 
         // 部分命令需要处理
@@ -233,9 +215,7 @@ private slots:
             mListCommand.append(QString("PASV\r\n").toLatin1());
             mListCommand.append(QString("TYPE A\r\n").toLatin1());
             mListCommand.append(QString("CWD upload\r\n").toLatin1());
-
-            QFileInfo info(mFileName);
-            mListCommand.append(QString("LIST %1\r\n").arg(info.fileName()).toLatin1());
+            mListCommand.append(QString("NLST\r\n").toLatin1());
         }
         else if (cmd == "PASV")
         {
@@ -246,32 +226,25 @@ private slots:
             if (nullptr == mSocketData)
             {
                 mSocketData = new QTcpSocket;
+                connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_data_socket_recv_data);
+                connect(mSocketData, &QTcpSocket::disconnected, this, &FtpProtocol::slot_data_socket_closed);
             }
-
             mSocketData->close();
             mSocketData->connectToHost(QHostAddress(mFtpHost), p1 + p2);
-            connect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_file_data_recv);
         }
-        else if (cmd == "LIST" && (status == "S"))
+        else if ((cmd == "NLST") && (status == "S"))
         {
-            // 由于是在单个线程中存在两个网络套接字，传输的最后一帧和传输完毕的结果相隔很近
-            // 命令触发的情况下，数据通道不一定被触发了，等待一段时间
-            uint16_t delay = (mServerFileInfo.length() == 0) ? 500 : 0;
-            QTimer::singleShot(delay, this, [this]
-            {
-                mListCommand.remove(0, 1);
-                QFileInfo info(mFileName);
-                if (mServerFileInfo.size() != 0)
-                {
-                    mTotalUploadLength = parseFileSize();
-                }
-                mTotalFileSize = info.size();
-                qDebug() << "mTotalUploadLength " << mTotalUploadLength;
-                uploadFile();
-            });
-            return;
+            mCommandRecvFlag = true;
+            if (!mDataRecvFlag) return;
+            return parse_cmd_upload_nlst_data();
         }
-        else if ((cmd == "APPE") || (cmd == "STOR"))
+        else if ((cmd == "LIST") && (status == "S"))
+        {
+            mCommandRecvFlag = true;
+            if (!mDataRecvFlag) return;
+            return parse_cmd_upload_list_data();
+        }
+        else if (((cmd == "APPE") || (cmd == "STOR")) && (status == "W"))
         {
             mListCommand.remove(0, 1);
             mFileStream.open(mFileName.toLocal8Bit().toStdString(), ios::binary | ios::in);
@@ -282,10 +255,18 @@ private slots:
                 return clear();
             }
 
+            mTotalFileSize = mLocalFileInfo.size();
             if (mTotalUploadLength > mTotalFileSize)
             {
                 mResultMessage = "服务器文件大小异常";
                 mTaskStatus = false;
+                return clear();
+            }
+            else if (mTotalUploadLength == mTotalFileSize)
+            {
+                mResultMessage = "文件上传完成";
+                emit sgl_file_upload_process(mFileName, 100);
+                mTaskStatus = true;
                 return clear();
             }
 
@@ -310,7 +291,6 @@ private slots:
                 emit sgl_file_upload_process(mFileName, percent * 100);
             }
 
-            mListCommand.remove(0, 1);
             mResultMessage = "文件上传完成";
             mTaskStatus = true;
 
@@ -334,13 +314,17 @@ private slots:
         sentCommand();
     }
 
-    void slot_file_data_recv()
+    void slot_data_socket_recv_data()
     {
         QByteArray array = mSocketData->readAll();
         if (mListCommand.size() > 0)
         {
             QString cmd = mListCommand.first().left(4).trimmed();
-            if (cmd == "LIST")
+            if (cmd == "NLST")
+            {
+                mServerDirInfo += array.toStdString().data();
+            }
+            else if (cmd == "LIST")
             {
                 mServerFileInfo += array.toStdString().data();
             }
@@ -355,7 +339,128 @@ private slots:
         }
     }
 
+    void slot_data_socket_closed()
+    {
+        mDataRecvFlag = true;
+        if (!mCommandRecvFlag) return;
+        if (mListCommand.size() == 0) return;
+        QString cmd = mListCommand.first().left(4).trimmed();
+        if (cmd == "NLST")
+        {
+            if (mDownloadFileFlag) parse_cmd_download_nlst_data();
+            else if (mUploadFileFlag) parse_cmd_upload_nlst_data();
+
+        }
+        else if (cmd == "LIST")
+        {
+            if (mDownloadFileFlag) parse_cmd_download_list_data();
+            else if (mUploadFileFlag) parse_cmd_upload_list_data();
+        }
+        else
+        {
+            mResultMessage = "数据传输功能异常";
+            mTaskStatus = false;
+            return clear();
+        }
+    }
+
+    // 解析下载 NLST 回复数据
+    void parse_cmd_download_nlst_data()
+    {
+        qDebug() << "parse nlst";
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.remove(0, 1);
+        auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
+        if (!list.contains(mFileName))
+        {
+            mResultMessage = "文件不存在";
+            mTaskStatus = false;
+
+            // 退出登录
+            mListCommand.append(QString("QUIT\r\n").toLatin1());
+            sentCommand();
+            return clear();
+        }
+        else
+        {
+            mListCommand.append(QString("PASV\r\n").toLatin1());
+            mListCommand.append(QString("TYPE A\r\n").toLatin1());
+            mListCommand.append(QString("LIST %1\r\n").arg(mFileName).toLatin1());
+
+            sentCommand();
+        }
+    }
+
+    // 解析上传 NLST 回复数据
+    void parse_cmd_upload_nlst_data()
+    {
+        qDebug() << "parse nlst" << mServerDirInfo;
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.remove(0, 1);
+        auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
+        if (!list.contains(mLocalFileInfo.fileName()))
+        {
+            mTotalUploadLength = 0;
+            uploadFile();
+        }
+        else
+        {
+            mListCommand.append(QString("PASV\r\n").toLatin1());
+            mListCommand.append(QString("TYPE A\r\n").toLatin1());
+            mListCommand.append(QString("LIST %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
+            sentCommand();
+        }
+    }
+
+    // 解析下载 LIST 回复数据
+    void parse_cmd_download_list_data()
+    {
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.remove(0, 1);
+        mTotalFileSize = parseFileSize();
+        downloadFile();
+    }
+
+    // 解析上传 LIST 回复数据
+    void parse_cmd_upload_list_data()
+    {
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.remove(0, 1);
+        mTotalUploadLength = parseFileSize();
+        uploadFile();
+    }
+
+    // 解析 RETR 回复数据
+    void parse_cmd_retr()
+    {
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.remove(0, 1);
+        mFileStream.close();
+        if (mTotalDownloadLength != mTotalFileSize)
+        {
+            mResultMessage = "文件大小异常";
+            mTaskStatus = false;
+            return clear();
+        }
+
+        emit sgl_file_download_process(mFileName, 100.00);
+
+        mResultMessage = "文件下载完成";
+        mTaskStatus = true;
+
+        // 退出登录
+        mListCommand.append(QString("QUIT\r\n").toLatin1());
+        sentCommand();
+        return clear();
+    }
+
 private:
+
     void clear()
     {
         // 文件流关闭
@@ -366,7 +471,8 @@ private:
         // 数据通道关闭
         if (nullptr != mSocketData)
         {
-            disconnect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_file_data_recv);
+            disconnect(mSocketData, &QTcpSocket::readyRead, this, &FtpProtocol::slot_data_socket_recv_data);
+            disconnect(mSocketData, &QTcpSocket::disconnected, this, &FtpProtocol::slot_data_socket_closed);
             mSocketData->close();
             mSocketData->deleteLater();
         }
@@ -434,8 +540,7 @@ private:
     void downloadFile()
     {
         QString filePath = QString("%1/%2").arg(mDownloadPath, mFileName);
-        QFileInfo info(filePath);
-        uint64_t length = info.size();
+        uint64_t length = mLocalFileInfo.size();
         mTotalDownloadLength = length; // 默认已下载大小
 
         mFileStream.open(filePath.toLocal8Bit().toStdString(), ios::binary | ios::out | ((length > 0) ? ios::app : ios::trunc));
@@ -460,18 +565,17 @@ private:
 
     void uploadFile()
     {
-        QFileInfo info(mFileName);
         if (mTotalUploadLength > 0)
         {
             mListCommand.append(QString("PASV\r\n").toLatin1());
             mListCommand.append(QString("TYPE I\r\n").toLatin1());
-            mListCommand.append(QString("APPE %1\r\n").arg(info.fileName()).toLatin1());
+            mListCommand.append(QString("APPE %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
         }
         else
         {
             mListCommand.append(QString("PASV\r\n").toLatin1());
             mListCommand.append(QString("TYPE I\r\n").toLatin1());
-            mListCommand.append(QString("STOR %1\r\n").arg(info.fileName()).toLatin1());
+            mListCommand.append(QString("STOR %1\r\n").arg(mLocalFileInfo.fileName()).toLatin1());
         }
 
         sentCommand();
@@ -480,6 +584,10 @@ private:
 private:
     // 服务地址
     QString mFtpHost;
+    // 用户名 (默认匿名)
+    QString mFtpUserName;
+    // 密码
+    QString mFtpUserPass;
     // 待操作的文件名称
     QString mFileName;
     // 等待执行的操作
@@ -488,8 +596,12 @@ private:
     QTcpSocket *mSocketCommand = nullptr;
     // 数据通道
     QTcpSocket *mSocketData = nullptr;
+    // 本地文件信息
+    QFileInfo mLocalFileInfo;
     // 文件流
     fstream mFileStream;
+    // 服务器目录描述
+    QString mServerDirInfo;
     // 服务器文件描述
     QString mServerFileInfo;
     // 文件总大小
@@ -502,13 +614,16 @@ private:
     QString mResultMessage;
     // 任务状态
     bool mTaskStatus = false;
+    // 命令是否回复
+    bool mCommandRecvFlag = false;
+    // 数据是否回复
+    bool mDataRecvFlag = false;
+    // 是否是下载任务
+    bool mDownloadFileFlag = false;
+    // 是否是上传任务
+    bool mUploadFileFlag = false;
     // 下载路径
     QString mDownloadPath;
-    // 用户名 (默认匿名)
-    QString mFtpUserName = "anonymous";
-    // 密码
-    QString mFtpUserPass = "@";
-
     // 状态码描述
     QJsonObject mStatusObject;
 };
@@ -528,6 +643,12 @@ public:
     const QString &getDownloadPath() const;
     void setDownloadPath(const QString &newDownloadPath);
 
+    const QString &getFtpUserPass() const;
+    void setFtpUserPass(const QString &newFtpUserPass);
+
+    const QString &getFtpUserName() const;
+    void setFtpUserName(const QString &newFtpUserName);
+
 signals:
     void sgl_file_download_process(const QString &file, float percent);
     void sgl_file_upload_process(const QString &file, float percent);
@@ -542,6 +663,11 @@ private:
     QString mFtpHost;
 
     QString mDownloadPath = "./";
+
+    // 登录用户名
+    QString mFtpUserName = "anonymous";
+    // 登录密码
+    QString mFtpUserPass = "@";
 };
 
 #endif // FTPMANAGER_H

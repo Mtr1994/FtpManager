@@ -63,7 +63,7 @@ void WidgetProgress::drawLiner()
 
     // 根据当前值绘制实际进度
     painter->setBrush(QBrush(mColor));
-    double rate = mValue * 1.00 / (mMaxValue - mMinValue);
+    double rate = mValue * 1.00 / (mMaxValue - mMinValue) / 100.00;
     painter->drawRoundedRect(QRect(0, (height - mProgressHeight) / 2.0, width * rate - labelWidth, mProgressHeight), mProgressHeight / 2.0, mProgressHeight / 2.0);
 
     // 绘制进度文本
@@ -71,7 +71,7 @@ void WidgetProgress::drawLiner()
     {
         painter->setPen(QPen(QColor(mLabelColor), 2, Qt::SolidLine));
         painter->setBrush(QBrush(QColor(mLabelColor)));
-        painter->drawText(QRect(width - labelWidth, 0 , labelWidth, height), Qt::AlignCenter, QString("%1%").arg(QString::number(rate * 100, 'f', 0)));
+        painter->drawText(QRect(width - labelWidth, 0 , labelWidth, height), Qt::AlignCenter, QString("%1%").arg(QString::number(rate * 100, 'f', 2)));
     }
 
     painter->end();
@@ -100,7 +100,7 @@ void WidgetProgress::drawCicle()
 
     // 根据当前值绘制实际进度
     painter->setPen(QPen(mColor, mCicleWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    double rate = mValue * 1.00 / (mMaxValue - mMinValue);
+    double rate = mValue * 1.00 / (mMaxValue - mMinValue) / 100.00;
     spanAngle = spanAngle * rate * -1;
     painter->drawArc(QRect(mCicleWidth + (width - cicleWidth) / 2.0, mCicleWidth + (height - cicleHeight) / 2.0, cicleWidth - mCicleWidth * 2, cicleHeight - mCicleWidth * 2), startAngle, spanAngle);
     // 绘制进度文本
@@ -114,7 +114,7 @@ void WidgetProgress::drawCicle()
         painter->setFont(font);
         painter->setPen(QPen(QColor(mLabelColor), 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter->setBrush(QBrush(QColor(mLabelColor)));
-        painter->drawText(QRect(0, 0 , width, height), Qt::AlignCenter, QString("%1%").arg(QString::number(rate * 100, 'f', 0)));
+        painter->drawText(QRect(0, 0 , width, height), Qt::AlignCenter, QString("%1%").arg(QString::number(rate * 100, 'f', 2)));
     }
 
     painter->end();
@@ -172,20 +172,20 @@ void WidgetProgress::setColor(const QColor &newColor)
     mColor = newColor;
 }
 
-uint64_t WidgetProgress::getValue() const
+float WidgetProgress::getValue() const
 {
-    return mValue;
+    return mValue / 100.00;
 }
 
-void WidgetProgress::setValue(uint64_t newValue)
+void WidgetProgress::setValue(float newValue)
 {
     if (newValue > mMaxValue)
     {
-        mValue = mMaxValue;
+        mValue = mMaxValue * 100.00;
     }
     else
     {
-        mValue = newValue;
+        mValue = newValue * 100.00;
     }
 
     update();

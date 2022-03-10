@@ -44,15 +44,17 @@ void MainWindow::init()
     ui->widgetProgress->setCicleWidth(10);
 
     mFtpManager = new FtpManager;
-    mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
-    //mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
+    //mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
+    mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
     mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop\\Dot");
+    mFtpManager->setFtpUserName("mtr");
+    mFtpManager->setFtpUserPass("Since1994");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
     connect(mFtpManager, &FtpManager::sgl_file_upload_process, this, &MainWindow::slot_file_upload_percent);
     connect(mFtpManager, &FtpManager::sgl_file_task_finish, this, &MainWindow::slot_file_task_finish);
 
     ui->tbDownload->setText("demo3.mp4");
-    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\demo2.mp4");
+    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\Dot\\demo2.mp4");
 }
 
 void MainWindow::slot_download_file()

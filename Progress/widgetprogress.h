@@ -11,8 +11,8 @@ public:
     enum {P_Liner = 1, P_Cicle};
     explicit WidgetProgress(QWidget *parent = nullptr);
 
-    uint64_t getValue() const;
-    void setValue(uint64_t newValue);
+    float getValue() const;
+    void setValue(float newValue);
 
     const QColor &getColor() const;
     void setColor(const QColor &newColor);
