@@ -74,7 +74,7 @@ public:
 signals:
     void sgl_file_download_process(const QString &file, float percent);
     void sgl_file_upload_process(const QString &file, float percent);
-    void sgl_file_task_finish(const QString &file, bool status, const QString &msg);
+    void sgl_ftp_task_response(const QString &file, bool status, const QString &msg);
 
 public slots:
     void slot_start_file_download()
@@ -82,7 +82,7 @@ public slots:
         mDownloadFileFlag = true;
         mLocalFileInfo = QFileInfo(QString("%1/%2").arg(mDownloadPath, mFileName));
         mSocketCommand = new QTcpSocket(this);
-        connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
+        connect(mSocketCommand, &QTcpSocket::disconnected, this, &FtpProtocol::slot_command_socket_closed);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_download_command_result);
         mSocketCommand->connectToHost(QHostAddress(mFtpHost), 21);
     }
@@ -92,38 +92,28 @@ public slots:
         mUploadFileFlag = true;
         mLocalFileInfo = QFileInfo(mFileName);
         mSocketCommand = new QTcpSocket(this);
-        connect(mSocketCommand, &QTcpSocket::errorOccurred, this, &FtpProtocol::slot_socket_error_occurred);
+        connect(mSocketCommand, &QTcpSocket::disconnected, this, &FtpProtocol::slot_command_socket_closed);
         connect(mSocketCommand, &QTcpSocket::readyRead, this, &FtpProtocol::slot_recv_upload_command_result);
         mSocketCommand->connectToHost(QHostAddress(mFtpHost), 21);
     }
 
 private slots:
-    void slot_socket_error_occurred(QAbstractSocket::SocketError)
-    {
-        // 服务连接失败
-        mResultMessage = "服务器连接异常";
-        mTaskStatus = false;
-        clear();
-    }
 
     void slot_recv_download_command_result()
     {
+        if (mListCommand.size() == 0) return;
         QByteArray datagram = mSocketCommand->readAll();
         QString str = QString::fromLocal8Bit(datagram).split("\r\n", Qt::SkipEmptyParts).last();
-
-        // 记录消息结果
-        mResultMessage = str;
-        if (mListCommand.size() == 0) return;
-
         QString cmd = mListCommand.first().left(4).trimmed();
         QString status = mStatusObject.value(cmd).toObject().value(str.at(0)).toString();
 
         qDebug() << "mResultMessage " << str << " " << status << " " << mListCommand;
 
+        if (cmd != "QUIT") mResultMessage = str;
+
         // 如果命令失败，立即返回
         if ((status == "E") || ((status == "F")))
         {
-            mTaskStatus = false;
             return clear();
         }
 
@@ -160,53 +150,51 @@ private slots:
         {
             mCommandRecvFlag = true;
             if (!mDataRecvFlag) return;
-            return parse_cmd_download_nlst_data();
+            return parse_nlst_data_pack();
         }
         else if ((cmd == "LIST") && (status == "S"))
         {
             mCommandRecvFlag = true;
             if (!mDataRecvFlag) return;
-            return parse_cmd_download_list_data();
+            return parse_list_data_pack();
         }
         else if ((cmd == "RETR") && (status == "S"))
         {
             mCommandRecvFlag = true;
             if (!mDataRecvFlag) return;
-            return parse_cmd_retr();
+            return parse_retr_data_pack();
+        }
+        else if ((cmd == "QUIT") && (status == "S"))
+        {
+            mListCommand.removeFirst();
+
+            mResultMessage = "文件下载完成，退出登录";
+            mTaskStatus = true;
+            clear();
         }
         else
         {
-            if (mListCommand.size() > 0 && ((status == "S") || (status == "V")))
-            {
-                mListCommand.removeFirst();
-            }
-            else
-            {
-                return;
-            }
+            if (status == "W") return;
+            mListCommand.removeFirst();
         }
 
-        sentCommand();
+        sendNextCommannd();
     }
 
     void slot_recv_upload_command_result()
     {
+        if (mListCommand.size() == 0) return;
         QByteArray datagram = mSocketCommand->readAll();
         QString str = QString::fromLocal8Bit(datagram).split("\r\n", Qt::SkipEmptyParts).last();
-        // 记录消息结果
-        mResultMessage = str;
-
-        if (mListCommand.size() == 0) return;
-
         QString cmd = mListCommand.first().left(4).trimmed();
         QString status = mStatusObject.value(cmd).toObject().value(str.at(0)).toString();
 
         qDebug() << "mResultMessage " << str << " " << status << " " << mListCommand;
+        if (cmd != "QUIT") mResultMessage = str;
 
         // 如果命令失败，立即返回
         if ((status == "E") || ((status == "F")))
         {
-            mTaskStatus = false;
             return clear();
         }
 
@@ -240,13 +228,13 @@ private slots:
         {
             mCommandRecvFlag = true;
             if (!mDataRecvFlag) return;
-            return parse_cmd_upload_nlst_data();
+            return parse_nlst_data_pack();
         }
         else if ((cmd == "LIST") && (status == "S"))
         {
             mCommandRecvFlag = true;
             if (!mDataRecvFlag) return;
-            return parse_cmd_upload_list_data();
+            return parse_list_data_pack();
         }
         else if (((cmd == "APPE") || (cmd == "STOR")) && (status == "W"))
         {
@@ -255,23 +243,22 @@ private slots:
             if (!mFileStream.is_open())
             {
                 mResultMessage = "本地文件打开失败";
-                mTaskStatus = false;
-                return clear();
+                mListCommand.append(QString("QUIT\r\n").toUtf8());
             }
 
             mTotalFileSize = mLocalFileInfo.size();
             if (mTotalUploadLength > mTotalFileSize)
             {
                 mResultMessage = "服务器文件大小异常";
-                mTaskStatus = false;
-                return clear();
+                mListCommand.append(QString("QUIT\r\n").toUtf8());
             }
             else if (mTotalUploadLength == mTotalFileSize)
             {
-                mResultMessage = "文件上传完成";
                 emit sgl_file_upload_process(mFileName, 100);
+                mResultMessage = "文件上传完成";
                 mTaskStatus = true;
-                return clear();
+
+                mListCommand.append(QString("QUIT\r\n").toUtf8());
             }
 
             // 检查网络状态
@@ -282,7 +269,6 @@ private slots:
                 if(tryCount > 5 * 15)
                 {
                     mResultMessage = "无法连接到服务器";
-                    mTaskStatus = false;
                     return clear();
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -290,6 +276,7 @@ private slots:
 
             // 定位本地文件读取位置
             mFileStream.seekg(mTotalUploadLength);
+            qDebug() << "mTotalUploadLength " << mTotalUploadLength;
             while (mFileStream.peek() != EOF)
             {
                 uint64_t subSize = 0;
@@ -310,27 +297,27 @@ private slots:
                 emit sgl_file_upload_process(mFileName, percent * 100);
             }
 
-            mResultMessage = "文件上传完成";
-            mTaskStatus = true;
+            mSocketData->close();
 
+            mTaskStatus = true;
             // 退出登录
             mListCommand.append(QString("QUIT\r\n").toUtf8());
-            sentCommand();
-            return clear();
+        }
+        else if ((cmd == "QUIT") && (status == "S"))
+        {
+            mListCommand.removeFirst();
+
+            mResultMessage = "文件上传完成，退出登录";
+            mTaskStatus = true;
+            clear();
         }
         else
         {
-            if (mListCommand.size() > 0 && ((status == "S") || (status == "V")))
-            {
-                mListCommand.removeFirst();
-            }
-            else
-            {
-                return;
-            }
+            if (status == "W") return;
+            mListCommand.removeFirst();
         }
 
-        sentCommand();
+        sendNextCommannd();
     }
 
     void slot_data_socket_recv_data()
@@ -367,129 +354,36 @@ private slots:
         QString cmd = mListCommand.first().left(4).trimmed();
         if (cmd == "NLST")
         {
-            if (mDownloadFileFlag) parse_cmd_download_nlst_data();
-            else if (mUploadFileFlag) parse_cmd_upload_nlst_data();
-
+            parse_nlst_data_pack();
         }
         else if (cmd == "LIST")
         {
-            if (mDownloadFileFlag) parse_cmd_download_list_data();
-            else if (mUploadFileFlag) parse_cmd_upload_list_data();
+            parse_list_data_pack();
         }
         else if (cmd == "RETR")
         {
-            parse_cmd_retr();
+            parse_retr_data_pack();
         }
         else
         {
             mResultMessage = "数据传输功能异常";
-            mTaskStatus = false;
             return clear();
         }
     }
 
-    // 解析下载 NLST 回复数据
-    void parse_cmd_download_nlst_data()
+    void slot_command_socket_closed()
     {
-        qDebug() << "parse nlst " << mServerDirInfo << " " << mFileName;
-        mCommandRecvFlag = false;
-        mDataRecvFlag = false;
-        mListCommand.removeFirst();
-        auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
-
-        if (!list.contains(mFileName))
-        {
-            mResultMessage = "文件不存在";
-            mTaskStatus = false;
-
-            // 退出登录
-            mListCommand.append(QString("QUIT\r\n").toUtf8());
-            sentCommand();
-            return clear();
-        }
-        else
-        {
-            mListCommand.append(QString("PASV\r\n").toUtf8());
-            mListCommand.append(QString("TYPE A\r\n").toUtf8());
-            mListCommand.append(QString("LIST %1\r\n").arg(mFileName.toUtf8().data()));
-
-            sentCommand();
-        }
-    }
-
-    // 解析上传 NLST 回复数据
-    void parse_cmd_upload_nlst_data()
-    {
-        qDebug() << "parse nlst" << mServerDirInfo;
-        mCommandRecvFlag = false;
-        mDataRecvFlag = false;
-        mListCommand.removeFirst();
-        auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
-        if (!list.contains(mLocalFileInfo.fileName()))
-        {
-            mTotalUploadLength = 0;
-            uploadFile();
-        }
-        else
-        {
-            mListCommand.append(QString("PASV\r\n").toUtf8());
-            mListCommand.append(QString("TYPE A\r\n").toUtf8());
-            mListCommand.append(QString("LIST %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
-            sentCommand();
-        }
-    }
-
-    // 解析下载 LIST 回复数据
-    void parse_cmd_download_list_data()
-    {
-        mCommandRecvFlag = false;
-        mDataRecvFlag = false;
-        mListCommand.removeFirst();
-        mTotalFileSize = parseFileSize();
-        if (mTotalFileSize < 0) return;
-        downloadFile();
-    }
-
-    // 解析上传 LIST 回复数据
-    void parse_cmd_upload_list_data()
-    {
-        mCommandRecvFlag = false;
-        mDataRecvFlag = false;
-        mListCommand.removeFirst();
-        mTotalUploadLength = parseFileSize();
-        if (mTotalUploadLength < 0) return;
-        uploadFile();
-    }
-
-    // 解析 RETR 回复数据
-    void parse_cmd_retr()
-    {
-        mCommandRecvFlag = false;
-        mDataRecvFlag = false;
-        mListCommand.removeFirst();
-        mFileStream.close();
-        if (mTotalDownloadLength != mTotalFileSize)
-        {
-            mResultMessage = "文件大小异常";
-            mTaskStatus = false;
-            return clear();
-        }
-
-        emit sgl_file_download_process(mFileName, 100.00);
-
-        mResultMessage = "文件下载完成";
-        mTaskStatus = true;
-
-        // 退出登录
-        mListCommand.append(QString("QUIT\r\n").toUtf8());
-        sentCommand();
-        return clear();
+        if (mTaskStatus) return;
+        // 服务连接失败
+        mResultMessage = "服务器连接断开";
+        clear();
     }
 
 private:
 
     void clear()
     {
+        qDebug() << "stop ftp protocol";
         // 文件流关闭
         if (mFileStream.is_open())
         {
@@ -515,19 +409,18 @@ private:
         mListCommand.clear();
 
         // 发送结果消息
-        emit sgl_file_task_finish(mFileName, mTaskStatus, mResultMessage);
+        emit sgl_ftp_task_response(mFileName, mTaskStatus, mResultMessage);
         this->deleteLater();
     }
 
-    void sentCommand()
+    void sendNextCommannd()
     {
         if (mListCommand.length() > 0)
         {
             QString cmd = mListCommand.first();
-            qDebug() << "send " << cmd << " size " << mListCommand.size();
+            qDebug() << "send " << cmd << " size " << mListCommand;
             mSocketCommand->write(cmd.toStdString().data());
             mSocketCommand->flush();
-            if (cmd == "QUIT")  clear();
         }
     }
 
@@ -540,7 +433,6 @@ private:
             if (list.size() != 9)
             {
                 mResultMessage = "Linux 系统文件大小解析失败";
-                mTaskStatus = false;
                 clear();
                 return -1;
             }
@@ -554,7 +446,6 @@ private:
             if (list.size() != 4)
             {
                 mResultMessage = "Windows 系统文件大小解析失败";
-                mTaskStatus = false;
                 clear();
                 return -1 ;
             }
@@ -571,11 +462,11 @@ private:
         uint64_t length = mLocalFileInfo.size();
         mTotalDownloadLength = length; // 默认已下载大小
 
+        qDebug() << "filePath " << filePath;
         mFileStream.open(filePath.toLocal8Bit().toStdString(), ios::binary | ios::out | ((length > 0) ? ios::app : ios::trunc));
         if (!mFileStream.is_open())
         {
             mResultMessage = "无法创建本地文件";
-            mTaskStatus = false;
             return clear();
         }
 
@@ -587,8 +478,8 @@ private:
             mListCommand.append(QString("REST %1\r\n").arg(QString::number(length)).toUtf8());
         }
 
-        mListCommand.append(QString("RETR %1\r\n").arg(mFileName).toUtf8());
-        sentCommand();
+        mListCommand.append(QString("RETR %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
+        sendNextCommannd();
     }
 
     void uploadFile()
@@ -606,7 +497,82 @@ private:
             mListCommand.append(QString("STOR %1\r\n").arg(mLocalFileInfo.fileName()).toUtf8());
         }
 
-        sentCommand();
+        sendNextCommannd();
+    }
+
+    // 解析 NLST 回复数据
+    void parse_nlst_data_pack()
+    {
+        qDebug() << "parse nlst " << mServerDirInfo << " " << mFileName;
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.removeFirst();
+        auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
+
+        if (!list.contains(mLocalFileInfo.fileName()))
+        {
+            if (mDownloadFileFlag)
+            {
+                mResultMessage = "文件不存在";
+
+                // 退出登录
+                mListCommand.append(QString("QUIT\r\n").toUtf8());
+                sendNextCommannd();
+            }
+            else if (mUploadFileFlag)
+            {
+                mTotalUploadLength = 0;
+                uploadFile();
+            }
+        }
+        else
+        {
+            mListCommand.append(QString("PASV\r\n").toUtf8());
+            mListCommand.append(QString("TYPE A\r\n").toUtf8());
+            mListCommand.append(QString("LIST %1\r\n").arg(mLocalFileInfo.fileName().toUtf8().data()));
+            sendNextCommannd();
+        }
+    }
+
+    // 解析 LIST 回复数据
+    void parse_list_data_pack()
+    {
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.removeFirst();
+        if (mDownloadFileFlag)
+        {
+            mTotalFileSize = parseFileSize();
+            if (mTotalFileSize < 0) return;
+            downloadFile();
+        }
+        else if (mUploadFileFlag)
+        {
+            mTotalUploadLength = parseFileSize();
+            if (mTotalUploadLength < 0) return;
+            uploadFile();
+        }
+    }
+
+    // 处理 RETR 回复后逻辑
+    void parse_retr_data_pack()
+    {
+        mCommandRecvFlag = false;
+        mDataRecvFlag = false;
+        mListCommand.removeFirst();
+        mFileStream.close();
+        if (mTotalDownloadLength != mTotalFileSize)
+        {
+            mResultMessage = "文件大小异常";
+            return clear();
+        }
+
+        emit sgl_file_download_process(mFileName, 100.00);
+
+        mTaskStatus = true;
+        // 退出登录
+        mListCommand.append(QString("QUIT\r\n").toUtf8());
+        sendNextCommannd();
     }
 
 private:
@@ -680,10 +646,10 @@ public:
 signals:
     void sgl_file_download_process(const QString &file, float percent);
     void sgl_file_upload_process(const QString &file, float percent);
-    void sgl_file_task_finish(const QString &file, bool status, const QString &msg);
+    void sgl_ftp_task_response(const QString &file, bool status, const QString &msg);
 
 private slots:
-    void slot_file_task_finish(const QString &file, bool status, const QString &msg);
+    void slot_ftp_task_response(const QString &file, bool status, const QString &msg);
 
 private:
     QMap<QString, QThread*> mMapThread;
