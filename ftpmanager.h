@@ -10,6 +10,8 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QHostAddress>
+#include <QStringList>
 
 //////
 /// 测试版本号 Qt Version 6.x.x
@@ -130,7 +132,7 @@ private slots:
         {
             if ((status == "S") || (status == "V"))
             {
-                mListCommand.remove(0, 1);
+                mListCommand.removeFirst();
                 // 准备登录
                 mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toUtf8());
                 mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
@@ -141,7 +143,7 @@ private slots:
         }
         else if (cmd == "PASV")
         {
-            mListCommand.remove(0, 1);
+            mListCommand.removeFirst();
             QStringList list = str.split(',');
             uint32_t p1 = list.at(4).toUInt() * 256;
             uint32_t p2 = QString(list.at(5)).remove(".").remove(")").toUInt();
@@ -176,7 +178,7 @@ private slots:
         {
             if (mListCommand.size() > 0 && ((status == "S") || (status == "V")))
             {
-                mListCommand.remove(0, 1);
+                mListCommand.removeFirst();
             }
             else
             {
@@ -211,18 +213,17 @@ private slots:
         // 部分命令需要处理
         if (cmd == "CONE")
         {
-            mListCommand.remove(0, 1);
+            mListCommand.removeFirst();
             // 准备登录
             mListCommand.append(QString("USER %1\r\n").arg(mFtpUserName).toUtf8());
             mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
             mListCommand.append(QString("PASV\r\n").toUtf8());
             mListCommand.append(QString("TYPE A\r\n").toUtf8());
-            mListCommand.append(QString("CWD upload\r\n").toUtf8());
             mListCommand.append(QString("NLST\r\n").toUtf8());
         }
         else if (cmd == "PASV")
         {
-            mListCommand.remove(0, 1);
+            mListCommand.removeFirst();
             QStringList list = str.split(',');
             uint32_t p1 = list.at(4).toUInt() * 256;
             uint32_t p2 = QString(list.at(5)).remove(".").remove(")").toUInt();
@@ -249,7 +250,7 @@ private slots:
         }
         else if (((cmd == "APPE") || (cmd == "STOR")) && (status == "W"))
         {
-            mListCommand.remove(0, 1);
+            mListCommand.removeFirst();
             mFileStream.open(mFileName.toLocal8Bit().toStdString(), ios::binary | ios::in);
             if (!mFileStream.is_open())
             {
@@ -321,7 +322,7 @@ private slots:
         {
             if (mListCommand.size() > 0 && ((status == "S") || (status == "V")))
             {
-                mListCommand.remove(0, 1);
+                mListCommand.removeFirst();
             }
             else
             {
@@ -359,6 +360,7 @@ private slots:
 
     void slot_data_socket_closed()
     {
+        qDebug() << "socket close " << mListCommand;
         mDataRecvFlag = true;
         if (!mCommandRecvFlag) return;
         if (mListCommand.size() == 0) return;
@@ -374,6 +376,10 @@ private slots:
             if (mDownloadFileFlag) parse_cmd_download_list_data();
             else if (mUploadFileFlag) parse_cmd_upload_list_data();
         }
+        else if (cmd == "RETR")
+        {
+            parse_cmd_retr();
+        }
         else
         {
             mResultMessage = "数据传输功能异常";
@@ -388,7 +394,7 @@ private slots:
         qDebug() << "parse nlst " << mServerDirInfo << " " << mFileName;
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
-        mListCommand.remove(0, 1);
+        mListCommand.removeFirst();
         auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
 
         if (!list.contains(mFileName))
@@ -405,7 +411,7 @@ private slots:
         {
             mListCommand.append(QString("PASV\r\n").toUtf8());
             mListCommand.append(QString("TYPE A\r\n").toUtf8());
-            mListCommand.append(QString("LIST %1\r\n").arg(mFileName.toUtf8()));
+            mListCommand.append(QString("LIST %1\r\n").arg(mFileName.toUtf8().data()));
 
             sentCommand();
         }
@@ -417,7 +423,7 @@ private slots:
         qDebug() << "parse nlst" << mServerDirInfo;
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
-        mListCommand.remove(0, 1);
+        mListCommand.removeFirst();
         auto list = mServerDirInfo.split("\r\n", Qt::SkipEmptyParts);
         if (!list.contains(mLocalFileInfo.fileName()))
         {
@@ -438,7 +444,7 @@ private slots:
     {
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
-        mListCommand.remove(0, 1);
+        mListCommand.removeFirst();
         mTotalFileSize = parseFileSize();
         if (mTotalFileSize < 0) return;
         downloadFile();
@@ -449,7 +455,7 @@ private slots:
     {
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
-        mListCommand.remove(0, 1);
+        mListCommand.removeFirst();
         mTotalUploadLength = parseFileSize();
         if (mTotalUploadLength < 0) return;
         uploadFile();
@@ -460,7 +466,7 @@ private slots:
     {
         mCommandRecvFlag = false;
         mDataRecvFlag = false;
-        mListCommand.remove(0, 1);
+        mListCommand.removeFirst();
         mFileStream.close();
         if (mTotalDownloadLength != mTotalFileSize)
         {

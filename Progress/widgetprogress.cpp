@@ -1,4 +1,4 @@
-#include "widgetprogress.h"
+﻿#include "widgetprogress.h"
 
 #include <QPainter>
 #include <QRect>

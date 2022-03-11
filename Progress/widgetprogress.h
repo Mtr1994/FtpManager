@@ -1,4 +1,4 @@
-#ifndef WIDGETPROGRESS_H
+﻿#ifndef WIDGETPROGRESS_H
 #define WIDGETPROGRESS_H
 
 #include <QWidget>
