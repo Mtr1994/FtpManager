@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QHostAddress>
 #include <QStringList>
+#include <QDir>
 
 //////
 /// 测试版本号 Qt Version 6.x.x
@@ -29,7 +30,7 @@ class FtpProtocol : public QObject
 {
     Q_OBJECT
 public:
-    FtpProtocol(const QString &host, const QString &user, const QString &pass, const QString &file, const QString &downloadpath) : mFtpHost(host), mFtpUserName(user), mFtpUserPass(pass), mFileName(file), mDownloadPath(downloadpath)
+    FtpProtocol(const QString &host, const QString &user, const QString &pass, const QString &remotepath, const QString &file, const QString &downloadpath) : mFtpHost(host), mFtpUserName(user), mFtpUserPass(pass), mRemoteFilePath(remotepath), mFileName(file), mDownloadPath(downloadpath)
     {
         // 填充状态码
         mStatusObject = QJsonDocument::fromJson("{"
@@ -128,6 +129,14 @@ private slots:
                 mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
                 mListCommand.append(QString("PASV\r\n").toUtf8());
                 mListCommand.append(QString("TYPE A\r\n").toUtf8());
+
+                // 切换路径
+                auto listDirName = QDir(mRemoteFilePath).path().split('/');
+                for (auto &name : listDirName)
+                {
+                    mListCommand.append(QString("CWD %1\r\n").arg(name.toUtf8()).toUtf8());
+                }
+
                 mListCommand.append(QString("NLST\r\n").toUtf8());
             }
         }
@@ -207,6 +216,13 @@ private slots:
             mListCommand.append(QString("PASS %1\r\n").arg(mFtpUserPass).toUtf8());
             mListCommand.append(QString("PASV\r\n").toUtf8());
             mListCommand.append(QString("TYPE A\r\n").toUtf8());
+
+            // 切换路径
+            auto listDirName = QDir(mRemoteFilePath).path().split('/');
+            for (auto &name : listDirName)
+            {
+                mListCommand.append(QString("CWD %1\r\n").arg(name.toUtf8()).toUtf8());
+            }
             mListCommand.append(QString("NLST\r\n").toUtf8());
         }
         else if (cmd == "PASV")
@@ -582,6 +598,8 @@ private:
     QString mFtpUserName;
     // 密码
     QString mFtpUserPass;
+    // 服务端文件路径
+    QString mRemoteFilePath;
     // 待操作的文件名称
     QString mFileName;
     // 等待执行的操作
@@ -628,8 +646,8 @@ class FtpManager : public QObject
 public:
     explicit FtpManager(QObject *parent = nullptr);
 
-    void downloadFile(const QString &file);
-    void uploadFile(const QString &file);
+    void downloadFile(const QString &file, const QString &remotePath = "");
+    void uploadFile(const QString &file, const QString &remotePath = "");
 
     const QString &getFtpHost() const;
     void setFtpHost(const QString &newFtpHost);

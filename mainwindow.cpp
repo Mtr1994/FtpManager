@@ -60,7 +60,7 @@ void MainWindow::init()
 void MainWindow::slot_download_file()
 {
     QString file = ui->tbDownload->text().trimmed();
-    mFtpManager->downloadFile(file);
+    mFtpManager->downloadFile(file, "T1");
 }
 
 void MainWindow::slot_upload_file()

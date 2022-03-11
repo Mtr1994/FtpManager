@@ -12,14 +12,14 @@ FtpManager::FtpManager(QObject *parent)
 
 }
 
-void FtpManager::downloadFile(const QString &file)
+void FtpManager::downloadFile(const QString &file, const QString &remotePath)
 {
     if (mFtpHost.isEmpty())
     {
         emit sgl_ftp_task_response(file, false, "未指定文件服务器地址");
         return;
     }
-    FtpProtocol *ftp = new FtpProtocol(mFtpHost,  mFtpUserName, mFtpUserPass, file, mDownloadPath);
+    FtpProtocol *ftp = new FtpProtocol(mFtpHost, mFtpUserName, mFtpUserPass, remotePath, file, mDownloadPath);
     mMapThread.insert(file, new QThread());
     ftp->moveToThread(mMapThread.value(file));
     connect(ftp, &FtpProtocol::sgl_file_download_process, this, &FtpManager::sgl_file_download_process, Qt::QueuedConnection);
@@ -28,7 +28,7 @@ void FtpManager::downloadFile(const QString &file)
     mMapThread.value(file)->start();
 }
 
-void FtpManager::uploadFile(const QString &file)
+void FtpManager::uploadFile(const QString &file, const QString &remotePath)
 {
     if (!QFile::exists(file))
     {
@@ -40,7 +40,7 @@ void FtpManager::uploadFile(const QString &file)
         emit sgl_ftp_task_response(file, false, "未指定文件服务器地址");
         return;
     }
-    FtpProtocol *ftp = new FtpProtocol(mFtpHost, mFtpUserName, mFtpUserPass, file, mDownloadPath);
+    FtpProtocol *ftp = new FtpProtocol(mFtpHost, mFtpUserName, mFtpUserPass, remotePath, file, mDownloadPath);
     mMapThread.insert(file, new QThread());
     ftp->moveToThread(mMapThread.value(file));
     connect(ftp, &FtpProtocol::sgl_file_upload_process, this, &FtpManager::sgl_file_upload_process, Qt::QueuedConnection);
