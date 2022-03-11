@@ -176,8 +176,6 @@ private slots:
         else if ((cmd == "QUIT") && (status == "S"))
         {
             mListCommand.removeFirst();
-
-            mResultMessage = "文件下载完成，退出登录";
             mTaskStatus = true;
             clear();
         }
@@ -315,6 +313,7 @@ private slots:
 
             mSocketData->close();
 
+            mResultMessage = "文件上传完成，退出登录";
             mTaskStatus = true;
             // 退出登录
             mListCommand.append(QString("QUIT\r\n").toUtf8());
@@ -322,9 +321,6 @@ private slots:
         else if ((cmd == "QUIT") && (status == "S"))
         {
             mListCommand.removeFirst();
-
-            mResultMessage = "文件上传完成，退出登录";
-            mTaskStatus = true;
             clear();
         }
         else
@@ -580,12 +576,15 @@ private:
         if (mTotalDownloadLength != mTotalFileSize)
         {
             mResultMessage = "文件大小异常";
-            return clear();
+        }
+        else
+        {
+            emit sgl_file_download_process(mFileName, 100.00);
+
+            mResultMessage = "文件下载完成，退出登录";
+            mTaskStatus = true;
         }
 
-        emit sgl_file_download_process(mFileName, 100.00);
-
-        mTaskStatus = true;
         // 退出登录
         mListCommand.append(QString("QUIT\r\n").toUtf8());
         sendNextCommannd();
