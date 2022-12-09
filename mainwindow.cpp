@@ -45,28 +45,28 @@ void MainWindow::init()
 
     mFtpManager = new FtpManager;
     // mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
-    mFtpManager->setFtpHost("124.221.148.133"); //124.221.148.133
-    mFtpManager->setDownloadPath("C:\\Users\\87482\\Desktop\\Dot");
-    mFtpManager->setFtpUserName("mtr");
-    mFtpManager->setFtpUserPass("Since1994");
+    mFtpManager->setFtpHost("101.34.253.220"); //124.221.148.133 124.221.148.13 101.34.253.200
+    mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop\\Dot");
+    mFtpManager->setFtpUserName("idsse");
+    mFtpManager->setFtpUserPass("123456");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
     connect(mFtpManager, &FtpManager::sgl_file_upload_process, this, &MainWindow::slot_file_upload_percent);
     connect(mFtpManager, &FtpManager::sgl_ftp_task_response, this, &MainWindow::slot_ftp_task_response);
 
     ui->tbDownload->setText("demo1.mp4");
-    ui->tbUpload->setText("C:\\Users\\87482\\Desktop\\Dot\\高清你的.txt");
+    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\Dot\\vsftpd.conf");
 }
 
 void MainWindow::slot_download_file()
 {
     QString file = ui->tbDownload->text().trimmed();
-    mFtpManager->downloadFile(file, "T1");
+    mFtpManager->downloadFile(file, "upload/TS-26/temp");
 }
 
 void MainWindow::slot_upload_file()
 {
     QString file = ui->tbUpload->text().trimmed();
-    mFtpManager->uploadFile(file);
+    mFtpManager->uploadFile(file, "upload/TS-26/temp");
 }
 
 void MainWindow::slot_file_download_percent(const QString &file, float percent)

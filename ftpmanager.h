@@ -134,7 +134,7 @@ private slots:
                 auto listDirName = QDir(mRemoteFilePath).path().split('/');
                 for (auto &name : listDirName)
                 {
-                    mListCommand.append(QString("CWD %1\r\n").arg(name.toUtf8()).toUtf8());
+                    mListCommand.append(QString("CWD %1\r\n").arg(name).toUtf8());
                 }
 
                 mListCommand.append(QString("NLST\r\n").toUtf8());
@@ -202,7 +202,19 @@ private slots:
         // 如果命令失败，立即返回
         if ((status == "E") || ((status == "F")))
         {
-            return clear();
+            // 但是如果是改变目录失败，允许直接发送新建
+            if (cmd == "CWD")
+            {
+                QString floder = mListCommand.first().split(" ").last().remove("\r\n");
+                mListCommand.insert(0, QString("MKD %1\r\n").arg(floder).toUtf8());
+                sendNextCommannd();
+                return;
+            }
+            else
+            {
+                clear();
+                return;
+            }
         }
 
         // 部分命令需要处理
@@ -216,10 +228,13 @@ private slots:
             mListCommand.append(QString("TYPE A\r\n").toUtf8());
 
             // 切换路径
-            auto listDirName = QDir(mRemoteFilePath).path().split('/');
-            for (auto &name : listDirName)
+            if (mRemoteFilePath.length() > 0)
             {
-                mListCommand.append(QString("CWD %1\r\n").arg(name.toUtf8()).toUtf8());
+                auto listDirName = QDir(mRemoteFilePath).path().split('/');
+                for (auto &name : listDirName)
+                {
+                    mListCommand.append(QString("CWD %1\r\n").arg(name).toUtf8());
+                }
             }
             mListCommand.append(QString("NLST\r\n").toUtf8());
         }
@@ -252,7 +267,6 @@ private slots:
         }
         else if (((cmd == "APPE") || (cmd == "STOR")) && (status == "W"))
         {
-            mListCommand.removeFirst();
             mFileStream.open(mFileName.toLocal8Bit().toStdString(), ios::binary | ios::in);
             if (!mFileStream.is_open())
             {
@@ -313,6 +327,12 @@ private slots:
 
             mSocketData->close();
 
+            // 当前命令需要等待服务器从命令套接字发送确认信号
+            return;
+        }
+        else if (((cmd == "APPE") || (cmd == "STOR")) && (status == "S"))
+        {
+            mListCommand.removeFirst();
             mResultMessage = "文件上传完成，退出登录";
             mTaskStatus = true;
             // 退出登录
@@ -322,6 +342,10 @@ private slots:
         {
             mListCommand.removeFirst();
             clear();
+        }
+        else if ((cmd == "MKD") && (status == "S"))
+        {
+            mListCommand.removeFirst();
         }
         else
         {
