@@ -1,7 +1,6 @@
 ﻿#include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QScreen>
 #include <QTcpSocket>
 #include <chrono>
 #include <thread>
@@ -26,47 +25,42 @@ MainWindow::~MainWindow()
 
 void MainWindow::init()
 {
-    QScreen *screen = QGuiApplication::screens().at(0);
-    float width = 512;
-    float height = 320;
-    if (nullptr != screen)
-    {
-        QRect rect = screen->availableGeometry();
-        width = rect.width() * 0.64 >= 512 ? 512 : rect.width() * 0.64;
-        height = rect.height() * 0.64 >= 320 ? 320 : rect.height() * 0.64;
-    }
-
-    resize(width, height);
     connect(ui->btnDownload, &QPushButton::clicked, this, &MainWindow::slot_download_file);
     connect(ui->btnUpload, &QPushButton::clicked, this, &MainWindow::slot_upload_file);
 
     ui->widgetProgress->setProgressType(WidgetProgress::P_Cicle);
     ui->widgetProgress->setCicleWidth(10);
 
-    mFtpManager = new FtpManager;
-    // mFtpManager->setFtpHost("192.168.1.103"); //124.221.148.133
-    mFtpManager->setFtpHost("101.34.253.220"); //124.221.148.133 124.221.148.13 101.34.253.200
+    mFtpManager = new FtpManager("101.34.253.220", "idsse", "123456");
+    // 开启/关闭断点续传
+    mFtpManager->setOpenBreakPointResume(true);
     mFtpManager->setDownloadPath("C:\\Users\\admin\\Desktop\\Dot");
-    mFtpManager->setFtpUserName("idsse");
-    mFtpManager->setFtpUserPass("123456");
     connect(mFtpManager, &FtpManager::sgl_file_download_process, this, &MainWindow::slot_file_download_percent);
     connect(mFtpManager, &FtpManager::sgl_file_upload_process, this, &MainWindow::slot_file_upload_percent);
-    connect(mFtpManager, &FtpManager::sgl_ftp_task_response, this, &MainWindow::slot_ftp_task_response);
+    connect(mFtpManager, &FtpManager::sgl_ftp_upload_task_finish, this, &MainWindow::slot_ftp_upload_task_finish);
 
-    ui->tbDownload->setText("demo1.mp4");
-    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\Dot\\vsftpd.conf");
+    connect(mFtpManager, &FtpManager::sgl_ftp_connect_status_change, this, [this](bool status)
+    {
+        ui->statusBar->showMessage(status ? "文件服务连接成功" : "文件服务连接失败或断开");
+    });
+
+    // 初始化文件服务连接
+    mFtpManager->init();
+
+    ui->tbDownload->setText("demo3.tif");
+    ui->tbUpload->setText("C:\\Users\\admin\\Desktop\\demo3.tif");
 }
 
 void MainWindow::slot_download_file()
 {
     QString file = ui->tbDownload->text().trimmed();
-    mFtpManager->downloadFile(file, "upload/TS-26/temp");
+    mFtpManager->downloadFile(file, "upload/TS-261");
 }
 
 void MainWindow::slot_upload_file()
 {
     QString file = ui->tbUpload->text().trimmed();
-    mFtpManager->uploadFile(file, "upload/TS-26/temp");
+    mFtpManager->uploadFile(file, "upload/TS-261");
 }
 
 void MainWindow::slot_file_download_percent(const QString &file, float percent)
@@ -85,8 +79,10 @@ void MainWindow::slot_file_upload_percent(const QString &file, float percent)
     }
 }
 
-void MainWindow::slot_ftp_task_response(const QString &file, bool status, const QString &msg)
+void MainWindow::slot_ftp_upload_task_finish(const QString &file, bool status, const QString &msg)
 {
     qDebug() << "file " << file << "   " << "status " << status << "   " << "msg " << msg;
+
+    ui->statusBar->showMessage(msg);
 }
 

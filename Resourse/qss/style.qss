@@ -1,4 +1,10 @@
-﻿QWidget
+﻿QMainWindow#MainWindow
+{
+    min-width: 32em;
+    min-height: 12em;
+}
+
+QWidget
 {
     font: 9pt "Microsoft Yahei";
     outline: none;

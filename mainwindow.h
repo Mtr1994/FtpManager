@@ -25,7 +25,7 @@ private slots:
 
     void slot_file_download_percent(const QString &file, float percent);
     void slot_file_upload_percent(const QString &file, float percent);
-    void slot_ftp_task_response(const QString &file, bool status, const QString &msg);
+    void slot_ftp_upload_task_finish(const QString &file, bool status, const QString &msg);
 
 private:
     Ui::MainWindow *ui;
